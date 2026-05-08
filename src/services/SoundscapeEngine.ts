@@ -32,6 +32,7 @@ export class SoundscapeEngine {
   private reverb: Tone.Reverb | null = null;
   private caveReverb: Tone.Reverb | null = null;
   private delay: Tone.PingPongDelay | null = null;
+  private dripDelay: Tone.PingPongDelay | null = null;
   private masterVol: Tone.Volume | null = null;
 
   // Music state & timing
@@ -104,6 +105,7 @@ export class SoundscapeEngine {
     // Cave Reverb for drips
     this.caveReverb = new Tone.Reverb({ decay: 3, wet: 0.85 }).connect(this.masterVol);
     this.delay = new Tone.PingPongDelay({ delayTime: "4n", feedback: 0.3, wet: 0.4 }).connect(this.reverb);
+    this.dripDelay = new Tone.PingPongDelay({ delayTime: "8n", feedback: 0.18, wet: 0.12 }).connect(this.caveReverb);
 
     // 1. Lush underwater drone (Delta/Theta base)
     this.padSynth = new Tone.PolySynth(Tone.Synth, {
@@ -136,7 +138,7 @@ export class SoundscapeEngine {
       octaves: 3,
       oscillator: { type: "sine" },
       envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
-    }).connect(this.caveReverb);
+    }).connect(this.dripDelay);
     this.dripSynth.volume.value = -15;
 
     // 5. Bird Chirps (Beta occasional)
@@ -203,6 +205,13 @@ export class SoundscapeEngine {
     const a = shape(alpha);
     const b = shape(beta);
     const volumes = this.layerVolumes;
+    const agitation = Math.max(0, Math.min(1, b * 0.68 + (1 - a) * 0.22 + t * 0.1));
+
+    // More agitation opens the acoustic space; calm states keep drips close and dry.
+    this.linearRamp(this.reverb?.wet, 0.24 + agitation * 0.42, 0.6);
+    this.linearRamp(this.caveReverb?.wet, 0.3 + agitation * 0.58, 0.6);
+    this.linearRamp(this.dripDelay?.wet, 0.04 + agitation * 0.52, 0.45);
+    this.linearRamp(this.dripDelay?.feedback, 0.08 + agitation * 0.54, 0.45);
 
     // Delta -> Deep Space / Ocean & Whales
     this.linearRamp(this.windNoise.volume, this.scaledDb(-42 + d * 24, volumes.deepWater), 0.35);
