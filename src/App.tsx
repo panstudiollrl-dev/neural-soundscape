@@ -30,7 +30,7 @@ const DEFAULT_LAYER_VOLUMES: SoundLayerVolumes = {
 
 const SOUND_LAYER_CONTROLS: Array<{ key: keyof SoundLayerVolumes; label: string; description: string }> = [
   { key: 'deepWater', label: 'Deep Water', description: 'Delta ocean body' },
-  { key: 'waterStream', label: 'Hydrophone', description: 'Submerged current' },
+  { key: 'waterStream', label: 'Water Flow', description: 'Field-recorded current' },
   { key: 'drone', label: 'Drone', description: 'Theta pad bed' },
   { key: 'whale', label: 'Whales', description: 'Delta calls' },
   { key: 'drips', label: 'Drips', description: 'Theta droplets' },

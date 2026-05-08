@@ -66,7 +66,7 @@ export class SoundscapeEngine {
     this.linearRamp(this.whaleSynth?.volume, this.scaledDb(-10, volumes.whale), 0.15);
     this.linearRamp(this.dripSynth?.volume, this.scaledDb(-15, volumes.drips), 0.15);
     this.linearRamp(this.birdSynth?.volume, this.scaledDb(-25, volumes.birds), 0.15);
-    this.linearRamp(this.hydroCrackleSynth?.volume, this.scaledDb(-28, volumes.waterStream), 0.15);
+    this.linearRamp(this.hydroCrackleSynth?.volume, this.scaledDb(-30, volumes.waterStream), 0.15);
   }
 
   constructor() {
@@ -119,10 +119,10 @@ export class SoundscapeEngine {
     }).connect(this.delay);
     this.birdSynth.volume.value = -25;
 
-    // 6. Hydrophone grains / ice-like contact crackle
+    // 6. Water-flow grains / edited field-recording texture
     this.hydroCrackleSynth = new Tone.NoiseSynth({
       noise: { type: "white" },
-      envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.025 }
+      envelope: { attack: 0.001, decay: 0.018, sustain: 0, release: 0.018 }
     }).connect(this.caveReverb);
     this.hydroCrackleSynth.volume.value = -28;
 
@@ -132,14 +132,14 @@ export class SoundscapeEngine {
     this.windNoise.connect(this.windFilter);
     this.windNoise.volume.value = -80;
 
-    // 8. Hydrophone current (muffled water pressure, not wind-like air noise)
-    this.waterNoise = new Tone.Noise("brown").start();
-    this.waterFilter = new Tone.Filter(520, "lowpass", -24).connect(this.reverb);
+    // 8. Water-flow bed: wet, irregular mid-band movement rather than wind-like wash.
+    this.waterNoise = new Tone.Noise("pink").start();
+    this.waterFilter = new Tone.Filter(760, "bandpass", -12).connect(this.reverb);
     this.waterNoise.connect(this.waterFilter);
     this.waterNoise.volume.value = -80;
     
-    // Slow underwater pressure movement for contact-mic texture.
-    this.waterLFO = new Tone.LFO({ frequency: 0.22, min: 160, max: 950 }).start();
+    // Slow irregular movement across the current.
+    this.waterLFO = new Tone.LFO({ frequency: 0.7, min: 240, max: 1850 }).start();
     this.waterLFO.connect(this.waterFilter.frequency);
   }
 
@@ -148,7 +148,7 @@ export class SoundscapeEngine {
     
     this.setLayerVolumes(this.layerVolumes);
     this.linearRamp(this.windNoise?.volume, this.scaledDb(-60, this.layerVolumes.deepWater), 0.1);
-    this.linearRamp(this.waterNoise?.volume, this.scaledDb(-46, this.layerVolumes.waterStream), 0.1);
+    this.linearRamp(this.waterNoise?.volume, this.scaledDb(-50, this.layerVolumes.waterStream), 0.1);
     this.linearRamp(this.masterVol?.volume, -10, 0.1);
     
     // Start background drone
@@ -196,15 +196,16 @@ export class SoundscapeEngine {
       this.lastChimeTime = now + Math.random() * 0.5;
     }
 
-    // Beta -> submerged current and pressure movement.
-    this.linearRamp(this.waterNoise.volume, this.scaledDb(-32 + b * 18 + t * 6, volumes.waterStream), 0.45);
-    this.linearRamp(this.waterFilter?.frequency, 180 + b * 760 + t * 320, 0.45);
-    this.linearRamp(this.waterLFO?.frequency, 0.08 + b * 1.9 + t * 0.5, 0.45);
+    // Beta -> cut-up water current: brighter turbulence and edited field-recording grains.
+    this.linearRamp(this.waterNoise.volume, this.scaledDb(-40 + b * 20 + t * 4, volumes.waterStream), 0.3);
+    this.linearRamp(this.waterFilter?.frequency, 360 + b * 1500 + t * 420, 0.3);
+    this.linearRamp(this.waterFilter?.Q, 0.65 + b * 1.35, 0.3);
+    this.linearRamp(this.waterLFO?.frequency, 0.35 + b * 3.2 + t * 0.8, 0.3);
 
-    if (volumes.waterStream > 0 && now - this.lastCrackleTime > (0.36 - b * 0.22)) {
-        const velocity = (0.035 + b * 0.14 + t * 0.05) * volumes.waterStream;
+    if (volumes.waterStream > 0 && now - this.lastCrackleTime > (0.18 - b * 0.1)) {
+        const velocity = (0.02 + b * 0.08 + t * 0.035) * volumes.waterStream;
         this.hydroCrackleSynth?.triggerAttackRelease("32n", now, velocity);
-        this.lastCrackleTime = now + Math.random() * 0.22;
+        this.lastCrackleTime = now + Math.random() * 0.12;
     }
 
     if (volumes.birds > 0 && b > 0.32 && now - this.lastBirdTime > (4 - b * 2.4)) {
