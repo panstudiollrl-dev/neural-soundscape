@@ -122,14 +122,14 @@ export class SoundscapeEngine {
     this.windNoise.connect(this.windFilter);
     this.windNoise.volume.value = -80;
 
-    // 7. Creek / Water (Pink noise + Bandpass + LFO)
-    this.waterNoise = new Tone.Noise("pink").start();
-    this.waterFilter = new Tone.Filter(1100, "bandpass", -12).connect(this.reverb);
+    // 7. Hydrophone current (muffled water pressure, not wind-like air noise)
+    this.waterNoise = new Tone.Noise("brown").start();
+    this.waterFilter = new Tone.Filter(520, "lowpass", -24).connect(this.reverb);
     this.waterNoise.connect(this.waterFilter);
     this.waterNoise.volume.value = -80;
     
-    // Bubble effect for water
-    this.waterLFO = new Tone.LFO({ frequency: 2, min: 600, max: 1200 }).start();
+    // Slow underwater pressure movement for contact-mic texture.
+    this.waterLFO = new Tone.LFO({ frequency: 0.22, min: 160, max: 950 }).start();
     this.waterLFO.connect(this.waterFilter.frequency);
   }
 
@@ -138,7 +138,7 @@ export class SoundscapeEngine {
     
     this.setLayerVolumes(this.layerVolumes);
     this.linearRamp(this.windNoise?.volume, this.scaledDb(-60, this.layerVolumes.deepWater), 0.1);
-    this.linearRamp(this.waterNoise?.volume, this.scaledDb(-52, this.layerVolumes.waterStream), 0.1);
+    this.linearRamp(this.waterNoise?.volume, this.scaledDb(-46, this.layerVolumes.waterStream), 0.1);
     this.linearRamp(this.masterVol?.volume, -10, 0.1);
     
     // Start background drone
@@ -186,10 +186,10 @@ export class SoundscapeEngine {
       this.lastChimeTime = now + Math.random() * 0.5;
     }
 
-    // Beta -> Real Water Flow & Birds
-    this.linearRamp(this.waterNoise.volume, this.scaledDb(-36 + b * 28, volumes.waterStream), 0.35);
-    this.linearRamp(this.waterFilter?.frequency, 750 + b * 2100, 0.35);
-    this.linearRamp(this.waterLFO?.frequency, 0.6 + b * 7, 0.35); // Water bubbles faster with Beta
+    // Beta -> submerged current and pressure movement.
+    this.linearRamp(this.waterNoise.volume, this.scaledDb(-32 + b * 18 + t * 6, volumes.waterStream), 0.45);
+    this.linearRamp(this.waterFilter?.frequency, 180 + b * 760 + t * 320, 0.45);
+    this.linearRamp(this.waterLFO?.frequency, 0.08 + b * 1.9 + t * 0.5, 0.45);
 
     if (volumes.birds > 0 && b > 0.32 && now - this.lastBirdTime > (4 - b * 2.4)) {
         // Double chirp pattern

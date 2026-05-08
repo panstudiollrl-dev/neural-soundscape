@@ -30,7 +30,7 @@ const DEFAULT_LAYER_VOLUMES: SoundLayerVolumes = {
 
 const SOUND_LAYER_CONTROLS: Array<{ key: keyof SoundLayerVolumes; label: string; description: string }> = [
   { key: 'deepWater', label: 'Deep Water', description: 'Delta ocean body' },
-  { key: 'waterStream', label: 'Water Stream', description: 'Beta creek flow' },
+  { key: 'waterStream', label: 'Hydrophone', description: 'Submerged current' },
   { key: 'drone', label: 'Drone', description: 'Theta pad bed' },
   { key: 'whale', label: 'Whales', description: 'Delta calls' },
   { key: 'drips', label: 'Drips', description: 'Theta droplets' },
@@ -321,7 +321,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-orange-500/30 overflow-x-hidden relative">
+    <div className="min-h-screen bg-[#070909] text-white font-sans selection:bg-orange-500/30 overflow-x-hidden relative">
       {/* Background Atmosphere - Responsive Glowing Blobs based on real EEG data */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-40 mix-blend-screen transition-opacity duration-1000" style={{ opacity: isPlaying ? 0.6 : 0.2 }}>
          {/* Delta Blob - Blue/Deep Ocean */}
@@ -350,11 +350,11 @@ export default function App() {
          />
       </div>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-6 py-12 lg:py-20 grid lg:grid-cols-2 gap-16 items-center min-h-screen">
+      <main className="relative z-10 max-w-7xl mx-auto px-5 py-6 lg:py-8 grid lg:grid-cols-[380px_minmax(0,1fr)] gap-6 items-start min-h-screen">
         
         {/* Left Side: Brand & Control */}
-        <div className="space-y-12">
-          <header className="space-y-6">
+        <div className="space-y-5">
+          <header className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl">
             <motion.div 
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -366,33 +366,33 @@ export default function App() {
               <span className="text-xs font-mono tracking-widest uppercase text-white/40">Mind-State Audio</span>
             </motion.div>
             
-            <h1 className="text-7xl lg:text-9xl font-medium tracking-tight leading-[0.85] text-white mix-blend-plus-lighter">
-              Neural<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-rose-400 italic">Soundscape</span>
+            <h1 className="text-4xl font-medium tracking-tight leading-none text-white mix-blend-plus-lighter">
+              Neural Soundscape
             </h1>
             
-            <p className="text-lg text-white/40 max-w-md font-light leading-relaxed">
+            <p className="text-sm text-white/45 font-light leading-relaxed">
               Transforming synchronized 8-channel EEG into spectral brainwave energy and a living natural environment. 
               Find your center through generated biomes containing whales, birds, water and wind.
             </p>
           </header>
 
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="rounded-2xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center gap-5">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={togglePlayback}
-              className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 ${
+              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 ${
                 isPlaying ? 'bg-orange-500 text-black shadow-[0_0_40px_rgba(249,115,22,0.4)]' : 'bg-white/5 border border-white/10 hover:bg-white/10'
               }`}
             >
-              {isPlaying ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
+              {isPlaying ? <Pause className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
             </motion.button>
             
-            <div className="space-y-4">
+            <div className="min-w-0 flex-1 space-y-4">
               <div>
                 <div className="text-sm font-mono text-white/60 mb-1 uppercase tracking-tighter">Current Source</div>
-                <div className="text-2xl font-light italic text-white/90">
+                <div className="truncate text-xl font-light italic text-white/90">
                   {isSimulating ? 'Generative Simulation' : `Playing: ${fileName}`}
                 </div>
                 {playbackError && (
@@ -427,15 +427,16 @@ export default function App() {
               </div>
             </div>
           </div>
+          </div>
 
-          <section className="max-w-xl space-y-4">
+          <section className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl">
             <div className="flex items-center gap-3">
               <Settings2 className="w-4 h-4 text-white/50" />
               <div>
                 <h2 className="text-xs uppercase tracking-[0.2em] text-white/50 font-semibold">Sound Mix</h2>
               </div>
             </div>
-            <div className="grid sm:grid-cols-2 gap-x-5 gap-y-3">
+            <div className="grid gap-y-3">
               {SOUND_LAYER_CONTROLS.map(control => (
                 <div key={control.key}>
                   <SoundLayerSlider
@@ -486,7 +487,7 @@ export default function App() {
           />
 
           {/* Interactive Waveform Section */}
-          <div className="col-span-2 mt-8 p-8 rounded-[32px] bg-white/5 border border-white/10 backdrop-blur-3xl relative overflow-hidden flex flex-col justify-between">
+          <div className="col-span-2 mt-2 p-6 rounded-2xl bg-black/30 border border-white/10 backdrop-blur-3xl relative overflow-hidden flex flex-col justify-between">
              <div className="flex justify-between items-start mb-8">
                 <div>
                    <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 font-semibold mb-1">Spectral Flow</h3>
@@ -529,7 +530,7 @@ function SoundLayerSlider({ label, description, value, onChange }: { label: stri
   const percent = Math.round(value * 100);
 
   return (
-    <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+    <label className="block rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[11px] uppercase tracking-widest text-white/70 font-semibold">{label}</span>
         <span className="text-[11px] font-mono text-white/45 tabular-nums">{percent}%</span>
@@ -550,7 +551,7 @@ function SoundLayerSlider({ label, description, value, onChange }: { label: stri
 
 function StatCard({ label, value, icon, description, active, colorClass }: { label: string, value: number, icon: React.ReactNode, description: string, active: boolean, colorClass: string }) {
   return (
-    <div className="p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-500 backdrop-blur-xl group">
+    <div className="p-5 rounded-2xl bg-black/30 border border-white/10 hover:border-white/20 transition-all duration-500 backdrop-blur-xl group">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
           {icon}
@@ -558,7 +559,7 @@ function StatCard({ label, value, icon, description, active, colorClass }: { lab
         <span className="text-[10px] uppercase tracking-widest text-white/40 font-bold">{label}</span>
       </div>
       <div className="flex items-baseline gap-2 mb-1">
-        <span className="text-4xl font-light tracking-tighter tabular-nums">
+        <span className="text-3xl font-light tracking-tighter tabular-nums">
           {active ? value : '--'}
         </span>
         <span className="text-sm text-white/20">%</span>
