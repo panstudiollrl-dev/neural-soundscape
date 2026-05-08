@@ -16,7 +16,7 @@ const REQUIRED_ELECTRODE_COLUMNS = ELECTRODE_CHANNELS.length;
 const EMPTY_BRAINWAVE: BrainwaveData = { delta: 0.5, theta: 0.5, alpha: 0.5, beta: 0.5 };
 const WAVEFORM_VISUAL_GAIN = 1.7;
 const EEG_SAMPLE_RATE_HZ = 128;
-const SPECTRAL_WINDOW_SECONDS = 2;
+const BAND_SMOOTHING_SECONDS = 0.8;
 const SEQUENCE_PLAYBACK_HZ = 10;
 const DEFAULT_LAYER_VOLUMES: SoundLayerVolumes = {
   deepWater: 1,
@@ -40,6 +40,8 @@ const SOUND_LAYER_CONTROLS: Array<{ key: keyof SoundLayerVolumes; label: string;
 
 type ElectrodeRow = number[];
 type BrainwaveBand = keyof BrainwaveData;
+type BiquadCoefficients = { b0: number; b1: number; b2: number; a1: number; a2: number };
+type BiquadState = { x1: number; x2: number; y1: number; y2: number };
 
 const BRAINWAVE_BANDS: Record<BrainwaveBand, { low: number; high: number; spatialWeights: number[] }> = {
   delta: { low: 0.5, high: 4, spatialWeights: [1, 1, 1, 1, 1, 1, 1, 1] },
@@ -77,68 +79,76 @@ const commonAverageReference = (rows: ElectrodeRow[]) => rows.map(row => {
   return row.map(value => value - rowAverage);
 });
 
-const removeBaseline = (values: number[]) => {
-  const center = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return values.map(value => value - center);
+const createBandpass = (lowHz: number, highHz: number, sampleRateHz: number): BiquadCoefficients => {
+  const centerHz = Math.sqrt(lowHz * highHz);
+  const bandwidth = Math.max(0.001, highHz - lowHz);
+  const q = Math.max(0.2, centerHz / bandwidth);
+  const omega = (2 * Math.PI * centerHz) / sampleRateHz;
+  const alpha = Math.sin(omega) / (2 * q);
+  const cos = Math.cos(omega);
+  const a0 = 1 + alpha;
+
+  return {
+    b0: alpha / a0,
+    b1: 0,
+    b2: -alpha / a0,
+    a1: (-2 * cos) / a0,
+    a2: (1 - alpha) / a0,
+  };
 };
 
-const hann = (index: number, length: number) => {
-  if (length <= 1) return 1;
-  return 0.5 * (1 - Math.cos((2 * Math.PI * index) / (length - 1)));
-};
-
-const bandPower = (samples: number[], lowHz: number, highHz: number, sampleRateHz: number) => {
-  const prepared = removeBaseline(samples);
-  const startBin = Math.max(1, Math.ceil((lowHz * prepared.length) / sampleRateHz));
-  const endBin = Math.max(startBin, Math.floor((highHz * prepared.length) / sampleRateHz));
-  let totalPower = 0;
-  let binCount = 0;
-
-  for (let bin = startBin; bin <= endBin; bin += 1) {
-    let real = 0;
-    let imaginary = 0;
-
-    for (let index = 0; index < prepared.length; index += 1) {
-      const angle = (2 * Math.PI * bin * index) / prepared.length;
-      const windowed = prepared[index] * hann(index, prepared.length);
-      real += windowed * Math.cos(angle);
-      imaginary -= windowed * Math.sin(angle);
-    }
-
-    totalPower += real * real + imaginary * imaginary;
-    binCount += 1;
-  }
-
-  return Math.log1p(totalPower / Math.max(1, binCount));
+const processBiquad = (input: number, coefficients: BiquadCoefficients, state: BiquadState) => {
+  const output = coefficients.b0 * input + coefficients.b1 * state.x1 + coefficients.b2 * state.x2 - coefficients.a1 * state.y1 - coefficients.a2 * state.y2;
+  state.x2 = state.x1;
+  state.x1 = input;
+  state.y2 = state.y1;
+  state.y1 = output;
+  return output;
 };
 
 const buildBrainwaveSequence = (electrodeRows: ElectrodeRow[]) => {
   const referencedRows = commonAverageReference(electrodeRows);
-  const windowSize = Math.max(16, Math.min(referencedRows.length, Math.round(EEG_SAMPLE_RATE_HZ * SPECTRAL_WINDOW_SECONDS)));
   const hopSize = Math.max(1, Math.round(EEG_SAMPLE_RATE_HZ / SEQUENCE_PLAYBACK_HZ));
+  const smoothing = 1 - Math.exp(-1 / (EEG_SAMPLE_RATE_HZ * BAND_SMOOTHING_SECONDS));
+  const bandKeys = Object.keys(BRAINWAVE_BANDS) as BrainwaveBand[];
+  const filters = Object.fromEntries(
+    bandKeys.map(band => [band, createBandpass(BRAINWAVE_BANDS[band].low, BRAINWAVE_BANDS[band].high, EEG_SAMPLE_RATE_HZ)])
+  ) as Record<BrainwaveBand, BiquadCoefficients>;
+  const states = Object.fromEntries(
+    bandKeys.map(band => [band, Array.from({ length: REQUIRED_ELECTRODE_COLUMNS }, () => ({ x1: 0, x2: 0, y1: 0, y2: 0 }))])
+  ) as Record<BrainwaveBand, BiquadState[]>;
+  const smoothedPowers = Object.fromEntries(
+    bandKeys.map(band => [band, Array(REQUIRED_ELECTRODE_COLUMNS).fill(0)])
+  ) as Record<BrainwaveBand, number[]>;
   const rawBandRows: BrainwaveData[] = [];
 
-  for (let start = 0; start <= referencedRows.length - windowSize; start += hopSize) {
-    const windowRows = referencedRows.slice(start, start + windowSize);
-    const nextBandPower = {} as BrainwaveData;
+  referencedRows.forEach((row, rowIndex) => {
+    bandKeys.forEach(band => {
+      for (let channelIndex = 0; channelIndex < REQUIRED_ELECTRODE_COLUMNS; channelIndex += 1) {
+        const filtered = processBiquad(row[channelIndex], filters[band], states[band][channelIndex]);
+        smoothedPowers[band][channelIndex] += (filtered * filtered - smoothedPowers[band][channelIndex]) * smoothing;
+      }
+    });
 
-    (Object.keys(BRAINWAVE_BANDS) as BrainwaveBand[]).forEach(band => {
+    if (rowIndex % hopSize === 0) {
+      const nextBandPower = {} as BrainwaveData;
+      bandKeys.forEach(band => {
       const config = BRAINWAVE_BANDS[band];
       let weightedTotal = 0;
       let weightTotal = 0;
 
       for (let channelIndex = 0; channelIndex < REQUIRED_ELECTRODE_COLUMNS; channelIndex += 1) {
-        const samples = windowRows.map(row => row[channelIndex]);
         const weight = config.spatialWeights[channelIndex] ?? 1;
-        weightedTotal += bandPower(samples, config.low, config.high, EEG_SAMPLE_RATE_HZ) * weight;
+        weightedTotal += Math.log1p(smoothedPowers[band][channelIndex]) * weight;
         weightTotal += weight;
       }
 
       nextBandPower[band] = weightedTotal / Math.max(1, weightTotal);
-    });
+      });
 
-    rawBandRows.push(nextBandPower);
-  }
+      rawBandRows.push(nextBandPower);
+    }
+  });
 
   const rowsToNormalize = rawBandRows.length > 0 ? rawBandRows : [EMPTY_BRAINWAVE];
   const normalized = {
@@ -289,6 +299,7 @@ export default function App() {
     
     if (file.name.endsWith('.csv')) {
       Papa.parse(file, {
+        worker: true,
         complete: (results) => {
           const rawData = results.data as any[];
 

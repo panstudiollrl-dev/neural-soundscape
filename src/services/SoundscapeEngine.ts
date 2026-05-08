@@ -25,6 +25,7 @@ export class SoundscapeEngine {
   private whaleSynth: Tone.Synth | null = null;
   private dripSynth: Tone.MembraneSynth | null = null;
   private birdSynth: Tone.Synth | null = null;
+  private hydroCrackleSynth: Tone.NoiseSynth | null = null;
 
   // Effects & Master
   private reverb: Tone.Reverb | null = null;
@@ -39,6 +40,7 @@ export class SoundscapeEngine {
   private lastWhaleTime = 0;
   private lastDripTime = 0;
   private lastBirdTime = 0;
+  private lastCrackleTime = 0;
   private layerVolumes: SoundLayerVolumes = DEFAULT_LAYER_VOLUMES;
 
   private linearRamp(param: { linearRampTo?: (value: any, rampTime: number) => void; value?: any } | undefined, value: number, rampTime: number) {
@@ -64,6 +66,7 @@ export class SoundscapeEngine {
     this.linearRamp(this.whaleSynth?.volume, this.scaledDb(-10, volumes.whale), 0.15);
     this.linearRamp(this.dripSynth?.volume, this.scaledDb(-15, volumes.drips), 0.15);
     this.linearRamp(this.birdSynth?.volume, this.scaledDb(-25, volumes.birds), 0.15);
+    this.linearRamp(this.hydroCrackleSynth?.volume, this.scaledDb(-28, volumes.waterStream), 0.15);
   }
 
   constructor() {
@@ -116,13 +119,20 @@ export class SoundscapeEngine {
     }).connect(this.delay);
     this.birdSynth.volume.value = -25;
 
-    // 6. Wind / Ocean Roar (Brown noise)
+    // 6. Hydrophone grains / ice-like contact crackle
+    this.hydroCrackleSynth = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.025 }
+    }).connect(this.caveReverb);
+    this.hydroCrackleSynth.volume.value = -28;
+
+    // 7. Wind / Ocean Roar (Brown noise)
     this.windNoise = new Tone.Noise("brown").start();
     this.windFilter = new Tone.Filter(200, "lowpass", -24).connect(this.reverb);
     this.windNoise.connect(this.windFilter);
     this.windNoise.volume.value = -80;
 
-    // 7. Hydrophone current (muffled water pressure, not wind-like air noise)
+    // 8. Hydrophone current (muffled water pressure, not wind-like air noise)
     this.waterNoise = new Tone.Noise("brown").start();
     this.waterFilter = new Tone.Filter(520, "lowpass", -24).connect(this.reverb);
     this.waterNoise.connect(this.waterFilter);
@@ -191,6 +201,12 @@ export class SoundscapeEngine {
     this.linearRamp(this.waterFilter?.frequency, 180 + b * 760 + t * 320, 0.45);
     this.linearRamp(this.waterLFO?.frequency, 0.08 + b * 1.9 + t * 0.5, 0.45);
 
+    if (volumes.waterStream > 0 && now - this.lastCrackleTime > (0.36 - b * 0.22)) {
+        const velocity = (0.035 + b * 0.14 + t * 0.05) * volumes.waterStream;
+        this.hydroCrackleSynth?.triggerAttackRelease("32n", now, velocity);
+        this.lastCrackleTime = now + Math.random() * 0.22;
+    }
+
     if (volumes.birds > 0 && b > 0.32 && now - this.lastBirdTime > (4 - b * 2.4)) {
         // Double chirp pattern
         const birdPitch = 2400 + b * 1800 + Math.random() * 1000;
@@ -207,6 +223,7 @@ export class SoundscapeEngine {
     this.padSynth?.releaseAll();
     this.chimeSynth?.releaseAll();
     this.whaleSynth?.triggerRelease();
+    this.hydroCrackleSynth?.triggerRelease();
     this.linearRamp(this.windNoise?.volume, -80, 1);
     this.linearRamp(this.waterNoise?.volume, -80, 1);
     this.linearRamp(this.masterVol?.volume, -80, 1); // Ensure complete silence
