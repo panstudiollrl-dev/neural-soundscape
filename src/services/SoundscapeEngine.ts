@@ -26,6 +26,7 @@ export class SoundscapeEngine {
   private dripSynth: Tone.MembraneSynth | null = null;
   private birdSynth: Tone.Synth | null = null;
   private hydroCrackleSynth: Tone.NoiseSynth | null = null;
+  private waterCavitySynths: Tone.Synth[] = [];
 
   // Effects & Master
   private reverb: Tone.Reverb | null = null;
@@ -41,6 +42,7 @@ export class SoundscapeEngine {
   private lastDripTime = 0;
   private lastBirdTime = 0;
   private lastCrackleTime = 0;
+  private waterCavityVoice = 0;
   private layerVolumes: SoundLayerVolumes = DEFAULT_LAYER_VOLUMES;
 
   private linearRamp(param: { linearRampTo?: (value: any, rampTime: number) => void; value?: any } | undefined, value: number, rampTime: number) {
@@ -66,7 +68,32 @@ export class SoundscapeEngine {
     this.linearRamp(this.whaleSynth?.volume, this.scaledDb(-10, volumes.whale), 0.15);
     this.linearRamp(this.dripSynth?.volume, this.scaledDb(-15, volumes.drips), 0.15);
     this.linearRamp(this.birdSynth?.volume, this.scaledDb(-25, volumes.birds), 0.15);
-    this.linearRamp(this.hydroCrackleSynth?.volume, this.scaledDb(-30, volumes.waterStream), 0.15);
+    this.linearRamp(this.hydroCrackleSynth?.volume, this.scaledDb(-34, volumes.waterStream), 0.15);
+    this.waterCavitySynths.forEach(synth => {
+      this.linearRamp(synth.volume, this.scaledDb(-18, volumes.waterStream), 0.15);
+    });
+  }
+
+  private randomCavityFrequency(beta: number) {
+    const low = 260;
+    const high = 4200 + beta * 1800;
+    const skew = Math.pow(Math.random(), 1.75);
+    return low * Math.pow(high / low, skew);
+  }
+
+  private triggerWaterCavity(now: number, beta: number, theta: number, volume: number) {
+    if (this.waterCavitySynths.length === 0 || volume <= 0) return;
+    const synth = this.waterCavitySynths[this.waterCavityVoice % this.waterCavitySynths.length];
+    this.waterCavityVoice += 1;
+
+    const startFreq = this.randomCavityFrequency(beta);
+    const endFreq = startFreq * (1.08 + Math.random() * 0.28);
+    const duration = 0.035 + Math.random() * 0.12 + theta * 0.04;
+    const startTime = now + Math.random() * 0.08;
+    const velocity = (0.015 + beta * 0.055 + theta * 0.025) * volume;
+
+    synth.triggerAttackRelease(startFreq, duration, startTime, velocity);
+    this.linearRamp(synth.frequency, endFreq, duration);
   }
 
   constructor() {
@@ -126,13 +153,23 @@ export class SoundscapeEngine {
     }).connect(this.caveReverb);
     this.hydroCrackleSynth.volume.value = -28;
 
-    // 7. Wind / Ocean Roar (Brown noise)
+    // 7. Small cavity resonators, based on the "many bubbles/cavities" model of running water.
+    this.waterCavitySynths = Array.from({ length: 10 }, () => {
+      const synth = new Tone.Synth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.001, decay: 0.07, sustain: 0, release: 0.025 }
+      }).connect(this.caveReverb);
+      synth.volume.value = -18;
+      return synth;
+    });
+
+    // 8. Wind / Ocean Roar (Brown noise)
     this.windNoise = new Tone.Noise("brown").start();
     this.windFilter = new Tone.Filter(200, "lowpass", -24).connect(this.reverb);
     this.windNoise.connect(this.windFilter);
     this.windNoise.volume.value = -80;
 
-    // 8. Water-flow bed: wet, irregular mid-band movement rather than wind-like wash.
+    // 9. Water-flow bed: turbulent support under the resonating cavities.
     this.waterNoise = new Tone.Noise("pink").start();
     this.waterFilter = new Tone.Filter(760, "bandpass", -12).connect(this.reverb);
     this.waterNoise.connect(this.waterFilter);
@@ -196,16 +233,23 @@ export class SoundscapeEngine {
       this.lastChimeTime = now + Math.random() * 0.5;
     }
 
-    // Beta -> cut-up water current: brighter turbulence and edited field-recording grains.
-    this.linearRamp(this.waterNoise.volume, this.scaledDb(-40 + b * 20 + t * 4, volumes.waterStream), 0.3);
-    this.linearRamp(this.waterFilter?.frequency, 360 + b * 1500 + t * 420, 0.3);
-    this.linearRamp(this.waterFilter?.Q, 0.65 + b * 1.35, 0.3);
+    // Beta -> running water: turbulence bed plus many small resonating cavities.
+    this.linearRamp(this.waterNoise.volume, this.scaledDb(-47 + b * 15 + t * 3, volumes.waterStream), 0.3);
+    this.linearRamp(this.waterFilter?.frequency, 420 + b * 1200 + t * 360, 0.3);
+    this.linearRamp(this.waterFilter?.Q, 0.45 + b * 0.9, 0.3);
     this.linearRamp(this.waterLFO?.frequency, 0.35 + b * 3.2 + t * 0.8, 0.3);
 
-    if (volumes.waterStream > 0 && now - this.lastCrackleTime > (0.18 - b * 0.1)) {
-        const velocity = (0.02 + b * 0.08 + t * 0.035) * volumes.waterStream;
+    if (volumes.waterStream > 0) {
+      const cavityCount = Math.max(1, Math.floor(1 + b * 4 + t * 2));
+      for (let index = 0; index < cavityCount; index += 1) {
+        this.triggerWaterCavity(now, b, t, volumes.waterStream);
+      }
+    }
+
+    if (volumes.waterStream > 0 && now - this.lastCrackleTime > (0.22 - b * 0.12)) {
+        const velocity = (0.01 + b * 0.04 + t * 0.018) * volumes.waterStream;
         this.hydroCrackleSynth?.triggerAttackRelease("32n", now, velocity);
-        this.lastCrackleTime = now + Math.random() * 0.12;
+        this.lastCrackleTime = now + Math.random() * 0.14;
     }
 
     if (volumes.birds > 0 && b > 0.32 && now - this.lastBirdTime > (4 - b * 2.4)) {
@@ -225,6 +269,7 @@ export class SoundscapeEngine {
     this.chimeSynth?.releaseAll();
     this.whaleSynth?.triggerRelease();
     this.hydroCrackleSynth?.triggerRelease();
+    this.waterCavitySynths.forEach(synth => synth.triggerRelease());
     this.linearRamp(this.windNoise?.volume, -80, 1);
     this.linearRamp(this.waterNoise?.volume, -80, 1);
     this.linearRamp(this.masterVol?.volume, -80, 1); // Ensure complete silence
